@@ -1,0 +1,50 @@
+erDiagram
+    %% Figura 1A - Nucleo comercial de Medistock (esquema C##MEDISTOCK)
+    %% Quien compra, que pide y que producto hay detras de cada linea.
+    %% PK: clave primaria. UK: clave unica. FK: clave foranea.
+    %% ID_TRANSACCION es FK logica hacia MED_TRANSACCIONES_BANCARIAS,
+    %% que se muestra en la Figura 1B.
+    MED_USUARIOS ||--o{ MED_PEDIDOS : "realiza"
+    MED_PEDIDOS ||--o{ MED_DETALLE_PEDIDOS : "contiene"
+    MED_PRODUCTOS ||--o{ MED_DETALLE_PEDIDOS : "aparece en"
+
+    MED_USUARIOS {
+        VARCHAR2 ID_USUARIO PK
+        VARCHAR2 NOMBRE
+        VARCHAR2 CORREO UK
+        VARCHAR2 ROL
+        VARCHAR2 INSTITUCION
+        VARCHAR2 HASH_CONTRASENA
+    }
+
+    MED_PEDIDOS {
+        VARCHAR2 ID_PEDIDO PK
+        VARCHAR2 ID_CLIENTE FK
+        VARCHAR2 ESTADO
+        NUMBER TOTAL
+        TIMESTAMP FECHA_CREACION
+        VARCHAR2 TIPO_PEDIDO
+        VARCHAR2 MEDIO_PAGO
+        VARCHAR2 ID_TRANSACCION FK
+        VARCHAR2 FECHA_PAGO
+    }
+
+    MED_DETALLE_PEDIDOS {
+        VARCHAR2 ID_PEDIDO PK,FK
+        NUMBER NUMERO_LINEA PK
+        VARCHAR2 ID_PRODUCTO FK
+        NUMBER CANTIDAD
+        NUMBER PRECIO_UNITARIO
+    }
+
+    MED_PRODUCTOS {
+        VARCHAR2 ID_PRODUCTO PK
+        VARCHAR2 SKU UK
+        VARCHAR2 NOMBRE
+        VARCHAR2 DESCRIPCION
+        NUMBER PRECIO
+        VARCHAR2 CATEGORIA
+        NUMBER STOCK
+        NUMBER STOCK_MINIMO
+        VARCHAR2 IMAGEN
+    }

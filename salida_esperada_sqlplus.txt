@@ -1,0 +1,132 @@
+Tipo T_IDS_PEDIDO ya existia: no se vuelve a crear.
+
+Procedimiento PL/SQL terminado correctamente.
+
+
+5 filas fusionadas.
+
+
+3 filas fusionadas.
+
+
+6 filas fusionadas.
+
+
+Confirmación terminada.
+
+=== PRODUCTOS CON STOCK BAJO (RECORD + cursor) ===
+SKU	    PRODUCTO			      CATEGORIA       STOCK / MIN
+--------------------------------------------------------------------------------
+GUA-001     Guantes de Nitrilo M (caja 100)   Insumos	      4 / 20  (faltan 16)
+ALG-001     Alcohol Gel 500 ml		      Insumos	      8 / 10  (faltan 2)
+--------------------------------------------------------------------------------
+Productos criticos: 2 | Unidades faltantes: 18
+
+Procedimiento PL/SQL terminado correctamente.
+
+
+Función creada.
+
+
+VALOR_TOTAL_INVENTARIO
+----------------------
+		821200
+
+
+Procedimiento creado.
+
+=== MARCAR PEDIDOS COMO ENVIADOS (VARRAY de 3 IDs) ===
+  Pedido PED-1001 -> shipped
+  Pedido PED-1003 -> shipped
+  Pedido PED-9999 -> no existe, se omite
+Actualizados: 2 | No encontrados: 1
+
+Procedimiento PL/SQL terminado correctamente.
+
+=== PEDIDOS ASOCIADOS A LA CATEGORIA: Insumos ===
+[PRODUCTO] ALG-001 - Alcohol Gel 500 ml | stock: 8
+   Pedido PED-1001 | estado: shipped | linea 2 | cantidad: 1 | precio: 3490
+[PRODUCTO] GAS-001 - Gasa Esteril 10x10 (sobre) | stock: 300
+   Pedido PED-1002 | estado: paid | linea 2 | cantidad: 10 | precio: 990
+   Pedido PED-1003 | estado: shipped | linea 2 | cantidad: 5 | precio: 990
+[PRODUCTO] GUA-001 - Guantes de Nitrilo M (caja 100) | stock: 4
+   Pedido PED-1002 | estado: paid | linea 1 | cantidad: 3 | precio: 8990
+[PRODUCTO] MSK-001 - Mascarilla Quirurgica C/3 | stock: 50
+   Pedido PED-1001 | estado: shipped | linea 1 | cantidad: 2 | precio: 5490
+
+Procedimiento PL/SQL terminado correctamente.
+
+
+Procedimiento creado.
+
+=== VALIDACION DE PRECIO (excepcion definida por el usuario) ===
+  Rechazado  -> ORA-20010: ORA-20010: Precio invalido para DEM-001: -1500. El precio debe ser mayor o igual a cero.
+Producto prod-demostracion-01 registrado correctamente.
+
+Procedimiento PL/SQL terminado correctamente.
+
+
+Disparador creado.
+
+=== VALIDACION DE STOCK EN EL TRIGGER ===
+  Bloqueado  -> ORA-20003: ORA-20003: Stock invalido (-5) para el producto GAS-001. El stock no puede ser negativo.
+ORA-06512: en "C##MEDISTOCK.MED_PRODUCTOS_STOCK_VALIDA_TRG", línea 3
+ORA-04088: erro
+r durante la ejecución del disparador 'C##MEDISTOCK.MED_PRODUCTOS_STOCK_VALIDA_TRG'
+  Stock valido aceptado para prod-gasas-01.
+
+Procedimiento PL/SQL terminado correctamente.
+
+
+Paquete creado.
+
+
+Cuerpo del paquete creado.
+
+=== PRUEBA INTEGRAL MEDISTOCK_GESTION ===
+Valor total inventario : 821.200,00
+Productos bajo minimo	: 2
+=== MEDISTOCK_GESTION.LISTAR_STOCK_BAJO ===
+  GUA-001 | Guantes de Nitrilo M (caja 100) | stock: 4 | minimo: 20 | faltan: 16
+  ALG-001 | Alcohol Gel 500 ml | stock: 8 | minimo: 10 | faltan: 2
+  Unidades faltantes totales: 18
+  Pedido PED-1001 -> ya estaba shipped
+  Pedido PED-1002 -> shipped
+Pedidos actualizados	: 1 | no encontrados: 0
+=== MEDISTOCK_GESTION.MOSTRAR_PEDIDOS_POR_CATEGORIA('Insumos') ===
+  Producto: ALG-001 - Alcohol Gel 500 ml
+    Pedido PED-1001 (shipped) linea 2 x 1
+  Producto: GAS-001 - Gasa Esteril 10x10 (sobre)
+    Pedido PED-1002 (shipped) linea 2 x 10
+    Pedido PED-1003 (shipped) linea 2 x 5
+  Producto: GUA-001 - Guantes de Nitrilo M (caja 100)
+    Pedido PED-1002 (shipped) linea 1 x 3
+  Producto: MSK-001 - Mascarilla Quirurgica C/3
+    Pedido PED-1001 (shipped) linea 1 x 2
+
+Procedimiento PL/SQL terminado correctamente.
+
+
+ID_PEDIDO  ESTADO			       TOTAL
+---------- ------------------------------ ----------
+PED-1001   shipped			       14470
+PED-1002   shipped			       36870
+PED-1003   shipped			       29940
+
+
+ID_PRODUCTO	       SKU	  NOMBRE				 PRECIO      STOCK VALOR_LINEA
+---------------------- ---------- ---------------------------------- ---------- ---------- -----------
+demo-product-1	       MSK-001	  Mascarilla Quirurgica C/3		   5490 	50	274500
+prod-alcohol-01        ALG-001	  Alcohol Gel 500 ml			   3490 	 8	 27920
+prod-demostracion-01   DEM-001	  Producto de demostracion		   2990 	12	 35880
+prod-gasas-01	       GAS-001	  Gasa Esteril 10x10 (sobre)		    990        300	297000
+prod-guantes-01        GUA-001	  Guantes de Nitrilo M (caja 100)	   8990 	 4	 35960
+prod-oximetro-01       OXI-001	  Oximetro de Pulso			  24990 	 6	149940
+
+6 filas seleccionadas.
+
+
+CAMBIOS_REGISTRADOS_POR_EL_TRIGGER
+----------------------------------
+				17
+

@@ -1,0 +1,60 @@
+erDiagram
+    direction LR
+    %% Figura 1B - Inventario y bancos de Medistock (esquema C##MEDISTOCK)
+    %% Existencias, alertas, historial de cambios y movimientos de dinero.
+    %% PK: clave primaria. UK: clave unica. FK: clave foranea.
+    %% La transaccion que paga un pedido se enlaza por MED_PEDIDOS.ID_TRANSACCION,
+    %% columna que aparece en la Figura 1A.
+    MED_PRODUCTOS ||--|| MED_ALERTAS_STOCK : "alerta 1:1"
+    MED_PRODUCTOS ||--o{ MED_HISTORIAL_STOCK : "historial"
+    MED_CUENTAS_BANCARIAS ||--o{ MED_TRANSACCIONES_BANCARIAS : "origina"
+
+    MED_PRODUCTOS {
+        VARCHAR2 ID_PRODUCTO PK
+        VARCHAR2 SKU UK
+        VARCHAR2 NOMBRE
+        VARCHAR2 DESCRIPCION
+        NUMBER PRECIO
+        VARCHAR2 CATEGORIA
+        NUMBER STOCK
+        NUMBER STOCK_MINIMO
+        VARCHAR2 IMAGEN
+    }
+
+    MED_ALERTAS_STOCK {
+        VARCHAR2 ID_PRODUCTO PK
+        VARCHAR2 SKU
+        VARCHAR2 NOMBRE_PRODUCTO
+        NUMBER STOCK
+        NUMBER STOCK_MINIMO
+        VARCHAR2 ESTADO
+        TIMESTAMP FECHA_CREACION
+        TIMESTAMP FECHA_ACTUALIZACION
+    }
+
+    MED_HISTORIAL_STOCK {
+        NUMBER ID_CAMBIO PK
+        VARCHAR2 ID_PRODUCTO FK
+        VARCHAR2 SKU
+        VARCHAR2 NOMBRE_PRODUCTO
+        NUMBER STOCK_ANTERIOR
+        NUMBER STOCK_NUEVO
+        VARCHAR2 TIPO_CAMBIO
+        TIMESTAMP FECHA_CAMBIO
+    }
+
+    MED_CUENTAS_BANCARIAS {
+        VARCHAR2 ID_CUENTA PK
+        NUMBER SALDO
+        VARCHAR2 MONEDA
+    }
+
+    MED_TRANSACCIONES_BANCARIAS {
+        VARCHAR2 ID_TRANSACCION PK
+        VARCHAR2 ID_CUENTA FK
+        VARCHAR2 TIPO_TRANSACCION
+        NUMBER MONTO
+        VARCHAR2 DESCRIPCION
+        TIMESTAMP FECHA_TRANSACCION
+        VARCHAR2 ESTADO
+    }
