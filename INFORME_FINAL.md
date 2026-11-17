@@ -70,7 +70,21 @@ Los números de nuestras ejecuciones reales sirven para dimensionar el trabajo: 
 
 ---
 
-## 6. MODELO RELACIONAL Y DIAGRAMA
+## 6. ARQUITECTURA NOSQL: MONGODB EN MEDISTOCK
+
+MongoDB no está en Medistock como un experimento: es donde nace el dato. El catálogo y los pedidos son justamente las dos partes del negocio que cambian de forma con más frecuencia. Un producto gana un campo opcional —una ficha técnica, un código de proveedor, una presentación distinta—, y un pedido de una clínica no trae los mismos datos que el de un particular. En un esquema relacional cada uno de esos ajustes es un `ALTER TABLE` con columnas que quedan nulas para todos los registros anteriores, y el resto de las consultas arrastra esa decisión. En un documento es un campo más en los documentos que lo necesitan, sin tocar a los demás. Esa flexibilidad tiene un costo que conviene decir en voz alta: MongoDB no ofrece uniones entre colecciones, ni claves foráneas, ni transacciones entre documentos de forma predeterminada. Por eso el reparto de roles es el que describimos en la sección 5 y no al revés: el documento guarda la información tal como la usa la aplicación, y las garantías fuertes las buscamos del lado de Oracle y PL/SQL.
+
+El caso que mejor muestra el modelo es el pedido. La colección `orders` guarda cada pedido como un solo documento que contiene sus líneas en un arreglo `items`, y el validador exige que ese arreglo tenga al menos un elemento (`minItems: 1`). Cada línea declara `productId`, `quantity` con mínimo 1 y `price` con mínimo 0, de modo que un pedido vacío o una cantidad negativa se rechazan en la escritura. Leer una orden completa es una sola llamada `findOne` que devuelve el cliente, las líneas, el total, el estado y los datos de pago, sin recorrer tablas ni reconstruir nada. En la réplica relacional el mismo pedido son tres filas —una en `MED_PEDIDOS` y dos en `MED_DETALLE_PEDIDOS`— que hay que unir por `ID_PEDIDO`. El precio dentro de la línea se repite a propósito: es el precio del momento de la venta, y si el producto sube de valor mañana, el pedido sigue mostrando lo que realmente se cobró. Embeber los ítems es seguro porque su cantidad está acotada por la naturaleza del negocio: un pedido tiene decenas de líneas, no millones, así que el documento no crece sin control como crecería si embebiéramos, por ejemplo, todo el historial de stock de un producto. El estado del pedido se limita a un dominio cerrado —pendiente, pagado, en proceso, en preparación, enviado y entregado—, el tipo distingue B2B de B2C, y el bloque opcional `metadata` guarda el medio de pago, la transacción y la fecha de pago solo cuando existen. Para consultar el historial de un cliente sin revisar la colección entera, el esquema declara un índice compuesto por `customerId` y `createdAt` descendente.
+
+Lo que en Oracle resuelven las restricciones, aquí lo resuelven los validadores y los índices. Cada una de las seis colecciones del esquema —`products`, `users`, `orders`, `bank_accounts`, `bank_transactions` y `stock_alerts`— se crea con un validador `$jsonSchema` que declara los campos obligatorios, los tipos y los rangos: precio, stock y stock mínimo no admiten valores negativos, y los campos cerrados son enumeraciones, como el rol del usuario o el estado de una transacción bancaria. La unicidad la dan los índices únicos sobre `id`, `sku` y `email`, más los de `accountId`. El caso más fino es el de las alertas: un índice único parcial sobre `productId` y `status`, filtrado a los documentos con estado `open`, garantiza que un producto tenga como máximo una alerta vigente, que es la misma relación uno a uno que representa `MED_ALERTAS_STOCK` en el modelo relacional. El disparador que abre y cierra esas alertas es un trigger de Atlas sobre `products`, que se ejecuta al insertar o modificar un producto y compara el stock con el mínimo. Conviene ser explícitos en lo que el motor no hace: las referencias entre colecciones —`orders.customerId`, `orders.items[].productId`, `bank_transactions.accountId`— no son claves foráneas, y el servicio comprueba que los productos existan y tengan stock antes de aceptar un pedido. Esa es exactamente la brecha que la réplica cubre con el trigger de validación y las reglas de PL/SQL.
+
+Las operaciones CRUD pasan por el backend y no por consultas sueltas. El driver oficial de MongoDB para Node.js se abre una sola vez en `src/shared/db.ts`, que reutiliza la conexión y entrega una colección por entidad; sobre esa base, cada módulo tiene su repositorio —`orders.repository.ts`, `products.repository.ts`, `users.repository.ts`— y las rutas nunca ven el driver. Crear es un `insertOne` del documento ya validado por el servicio. Leer es `find` con una proyección que excluye `_id` y orden explícito para los listados, o `findOne` por el identificador propio de la aplicación; cuando se necesitan varios productos de un pedido, un `find` con el operador `$in` sobre la lista de identificadores y una proyección que trae solo identificador, precio y stock, en lugar de traer documentos completos. Actualizar es `findOneAndUpdate` con `$set` sobre los campos definidos, pidiendo el documento posterior al cambio para devolverlo en la misma operación; el servicio descarta los campos indefinidos antes de armar el objeto, de modo que una actualización parcial no borre lo que no venía en la petición. Eliminar es `findOneAndDelete`, que devuelve el documento borrado y permite confirmar qué se eliminó. Cada una de esas escrituras encola además un evento en `oracle_sync_outbox`, y ese evento es el que alimenta la sincronización que describimos en la sección 5: el mismo documento que se inserta en Mongo es el que se serializa a JSON y llega a `APLICAR_CAMBIO`. Las dos secciones describen el mismo flujo visto desde extremos distintos.
+
+La conclusión de este apartado es un intercambio consciente. MongoDB nos dio un catálogo que puede crecer en campos sin migraciones y un pedido que llega completo en una sola lectura, a cambio de restricciones más débiles entre colecciones. No creemos que un motor sea mejor que el otro: creemos que el catálogo y los pedidos se parecen más a documentos que a filas, y que los reportes, la auditoría y las reglas que no admiten excepciones se parecen más a PL/SQL. Un almacén de documentos sin disciplina es apenas una carpeta de archivos JSON; los validadores, los índices y la réplica son lo que lo convierten en una base de datos.
+
+---
+
+## 7. MODELO RELACIONAL Y DIAGRAMA
 
 Las ocho tablas de la réplica no son una lista suelta: se ordenan alrededor de dos núcleos. El primero es el catálogo, con `MED_PRODUCTOS` como tabla central. El segundo es la operación comercial, con `MED_PEDIDOS` como encabezado y `MED_DETALLE_PEDIDOS` como su detalle. Alrededor de esos dos núcleos cuelgan el dinero (`MED_CUENTAS_BANCARIAS` y `MED_TRANSACCIONES_BANCARIAS`), las personas (`MED_USUARIOS`) y el control de existencias (`MED_ALERTAS_STOCK` y `MED_HISTORIAL_STOCK`).
 
@@ -88,7 +102,7 @@ Para que el modelo se lea bien en papel, lo presentamos en dos figuras complemen
 
 ![Figura 1B. Inventario y bancos: productos, alertas de stock, historial de stock, cuentas y transacciones bancarias. La columna ID_TRANSACCION, que enlaza el pago con un pedido, se muestra en la Figura 1A.](modelo_relacional_1b.png)
 
-## 7. CONCLUSIONES
+## 8. CONCLUSIONES
 
 El proyecto nos dejó tres aprendizajes que van más allá de la sintaxis.
 
@@ -100,7 +114,7 @@ El tercero es que una arquitectura híbrida exige criterio, no solo herramientas
 
 ---
 
-## 8. BIBLIOGRAFÍA
+## 9. BIBLIOGRAFÍA
 
 - Oracle Corporation. *Oracle Database PL/SQL Language Reference, 21c*. https://docs.oracle.com/en/database/oracle/oracle-database/21/lnpls/
 - Oracle Corporation. *Oracle Database SQL Language Reference — Funciones JSON y MERGE, 21c*. https://docs.oracle.com/en/database/oracle/oracle-database/21/sqlrf/
@@ -111,9 +125,9 @@ El tercero es que una arquitectura híbrida exige criterio, no solo herramientas
 
 ---
 
-## 9. ANEXOS
+## 10. ANEXOS
 
-**Anexo A — Modelo relacional.** El diagrama relacional de las ocho tablas (`MED_PRODUCTOS`, `MED_USUARIOS`, `MED_PEDIDOS`, `MED_DETALLE_PEDIDOS`, `MED_CUENTAS_BANCARIAS`, `MED_TRANSACCIONES_BANCARIAS`, `MED_ALERTAS_STOCK` y `MED_HISTORIAL_STOCK`) se incluye en este documento como la Figura 1 (sección 6). Por legibilidad se dividió en dos partes: la Figura 1A con el núcleo comercial y la Figura 1B con el área de inventario y bancos. Las imágenes también se entregan como archivos aparte (`modelo_relacional_1a.png` y `modelo_relacional_1b.png`), y el código fuente que las genera está adjunto en `modelo_relacional_1a.mmd` y `modelo_relacional_1b.mmd`.
+**Anexo A — Modelo relacional.** El diagrama relacional de las ocho tablas (`MED_PRODUCTOS`, `MED_USUARIOS`, `MED_PEDIDOS`, `MED_DETALLE_PEDIDOS`, `MED_CUENTAS_BANCARIAS`, `MED_TRANSACCIONES_BANCARIAS`, `MED_ALERTAS_STOCK` y `MED_HISTORIAL_STOCK`) se incluye en este documento como la Figura 1 (sección 7). Por legibilidad se dividió en dos partes: la Figura 1A con el núcleo comercial y la Figura 1B con el área de inventario y bancos. Las imágenes también se entregan como archivos aparte (`modelo_relacional_1a.png` y `modelo_relacional_1b.png`), y el código fuente que las genera está adjunto en `modelo_relacional_1a.mmd` y `modelo_relacional_1b.mmd`.
 
 **Anexo B — Código PL/SQL.** El archivo `evaluacion_medistock.sql` contiene, comentado línea por línea, la preparación del tipo VARRAY, los datos de prueba idempotentes, el bloque con RECORD, la función de valor de inventario, el procedimiento con VARRAY, los cursores anidados, el procedimiento con excepción definida por el usuario, el trigger de validación de stock, el paquete `MEDISTOCK_GESTION` y las pruebas finales de aceptación.
 
@@ -124,3 +138,5 @@ El tercero es que una arquitectura híbrida exige criterio, no solo herramientas
 **Anexo E — Guion de presentación.** El archivo `GUION_PRESENTACION.md` detalla el orden de la exposición, los comandos utilizados y las explicaciones técnicas de cada objeto de la rúbrica.
 
 **Anexo F — Código fuente del diagrama.** El diagrama está escrito en Mermaid y se entrega en dos archivos, uno por figura: `modelo_relacional_1a.mmd` (núcleo comercial) y `modelo_relacional_1b.mmd` (inventario y bancos). Además se incluye `modelo_relacional.mmd` con el modelo completo en una sola vista, útil para editar las relaciones de conjunto. Los tres archivos se pueden abrir en mermaid.live o pegar en draw.io (Arrange → Insert → Advanced → Mermaid) para regenerar o modificar las figuras; las versiones exportadas son `modelo_relacional_1a.png`, `modelo_relacional_1b.png` y `modelo_relacional.png`.
+
+**Anexo G — Esquema de la base documental (MongoDB).** El archivo `mongo_schema.json`, copia íntegra del `backend/db/schema.json` del proyecto, declara la base `medistock` y sus seis colecciones: `products`, `users`, `orders`, `bank_accounts`, `bank_transactions` y `stock_alerts`. Para cada una especifica el validador `$jsonSchema` —campos obligatorios, tipos, rangos mínimos y dominios cerrados— y los índices que la acompañan, incluido el índice parcial que permite una sola alerta abierta por producto. Es la referencia de la sección 6: de ahí salen las validaciones, los índices y la forma del arreglo `items` de cada pedido. La colección `products` es además el origen de los documentos que `MEDISTOCK_SINCRONIZACION` replica en `MED_PRODUCTOS` (sección 5). La versión tipada que aplica `npm run db:setup` está en `src/shared/mongo-schema.ts`, y la explicación en prosa en `docs/Modelo_NoSQL.md`.

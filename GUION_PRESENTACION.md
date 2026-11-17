@@ -47,8 +47,10 @@ netstat -ano | grep -E ":1521|:27017" | grep LISTENING
 
 Que decir mientras se ejecuta:
 > "MongoDB es la base principal del proyecto y escucha en el puerto 27017. Oracle XE es la replica que guarda la logica PL/SQL y escucha en el 1521. Los dos corren como servicios de Windows, por eso los levanto desde la terminal."
+>
+> **Yeferson:** "Y MongoDB es donde nace el dato: el catalogo y los pedidos se guardan como documentos porque son justo las partes que mas cambian. Un producto gana un campo nuevo -una ficha tecnica, un codigo de proveedor- y en un documento eso es agregar el campo, no un `ALTER TABLE` con columnas nulas para todos los registros anteriores."
 
-**Opcional (si el profesor quiere ver las colecciones):** abrir MongoDB Compass -> `mongodb://localhost:27017` -> base `medistock` -> coleccion `products`.
+**Para la demostracion de CRUD (seccion 3):** abrir MongoDB Compass -> `mongodb://localhost:27017` -> base `medistock` -> coleccion `products`, y dejarlo abierto antes de empezar.
 
 ---
 
@@ -130,7 +132,7 @@ Orden de la salida y su significado:
 
 ---
 
-## 3. Demostracion de la conexion MongoDB -> Oracle (3 minutos)
+## 3. Demostracion de CRUD y conexion MongoDB -> Oracle (5 minutos)
 
 ### Preparacion (una sola vez, antes de la presentacion)
 
@@ -144,6 +146,54 @@ Si no quieres crear `.env`, puedes pasar la clave por variable de entorno:
 
 ```bash
 ORACLE_PASSWORD='tu_clave' node demo_conexion.js
+```
+
+### Paso previo (Johana) - CRUD rapido en MongoDB Compass (2 minutos)
+
+Antes de sincronizar, se muestra que el CRUD de la base principal se domina desde la herramienta y no solo desde el script. Abrir **MongoDB Compass**, conectar a `mongodb://localhost:27017`, elegir la base `medistock` y la coleccion `products`, y refrescar el panel para partir del estado real.
+
+**1. Create.** Boton "Add Data" -> "Insert Document" y pegar este documento (los nueve campos son obligatorios para el validador `$jsonSchema`):
+
+```json
+{
+  "id": "demo-crud-01",
+  "name": "Producto de prueba CRUD",
+  "sku": "CRUD-DEMO-01",
+  "description": "Documento temporal para la demostracion",
+  "price": 1000,
+  "category": "Insumos",
+  "stock": 5,
+  "minStock": 2,
+  "image": "https://picsum.photos/seed/crud-demo/400/400"
+}
+```
+
+Insertar. Si se borra un campo antes de insertar, Compass rechaza la escritura con el error del validador: vale la pena mostrarlo, porque ahi se ve que MongoDB no acepta cualquier cosa.
+
+**2. Read.** En el filtro escribir `{ "id": "demo-crud-01" }` y mostrar el documento completo: un solo objeto con todos sus campos, no una fila repartida entre tablas.
+
+**3. Update.** Con el lapiz ("Edit Document"), cambiar `price` a `1500` y `stock` a `8`, y actualizar. Refrescar y mostrar los valores nuevos en el mismo documento.
+
+**4. Delete.** Con el icono de basura, eliminar el documento y confirmar. Quitar el filtro y comprobar que ya no aparece.
+
+> **Yeferson / Johana, mientras se hace:** "Esto es la base que manda. Insertamos un documento completo, lo leemos por su id, le cambiamos precio y stock en el mismo documento y lo borramos. No hubo que crear tablas ni migrar nada: el producto simplemente tiene los campos que necesita."
+
+**Dos aclaraciones que conviene dejar dichas (y que suman puntos):**
+
+- Esta escritura va directo a la base, sin pasar por el backend, asi que **no deja evento en `oracle_sync_outbox`** y Oracle no se entera. La replica recibe solo lo que escribe la API; por eso la demo se hace con un `id` y un SKU de prueba.
+- El documento se borra al final a proposito: el script imprime el total de documentos en `products` y ese numero debe seguir siendo el mismo que antes de la demo (`Documentos en products 1`).
+
+**Si Compass no abre o se cae en plena presentacion**, el mismo CRUD se hace en una terminal con `mongosh`:
+
+```bash
+mongosh "mongodb://localhost:27017/medistock" --eval '
+db.products.insertOne({ id: "demo-crud-01", name: "Producto de prueba CRUD", sku: "CRUD-DEMO-01",
+  description: "Documento temporal para la demostracion", price: 1000, category: "Insumos",
+  stock: 5, minStock: 2, image: "https://picsum.photos/seed/crud-demo/400/400" });
+db.products.findOne({ id: "demo-crud-01" });
+db.products.updateOne({ id: "demo-crud-01" }, { $set: { price: 1500, stock: 8 } });
+db.products.deleteOne({ id: "demo-crud-01" });
+'
 ```
 
 ### Ejecucion (el comando que se muestra al profesor)
@@ -187,10 +237,13 @@ La fila existe con el mismo stock que muestra la salida de Node.
 
 ## 4. Guion oral, minuto por minuto
 
-**0:00 - 0:40 | Contexto**
+**0:00 - 0:55 | Contexto**
 > "Medistock es un inventario para insumos clinicos. MongoDB es la base principal: ahi viven los documentos de productos, pedidos y usuarios. Oracle es una replica unidireccional que mantiene las mismas entidades en tablas relacionales, y sobre esa replica corre la logica PL/SQL del taller: reportes de stock, actualizaciones masivas, validaciones y auditoria."
 
-**0:40 - 1:30 | Levanto las bases**
+**Yeferson:**
+> "Elegimos MongoDB para el catalogo y los pedidos porque son las dos partes que mas cambian. Un producto gana un campo nuevo -una ficha tecnica, un codigo de proveedor- y en un documento eso es agregar el campo, no un `ALTER TABLE` con columnas nulas para todos los registros viejos. Y el pedido guarda sus lineas dentro del mismo documento, asi que leerlo completo es una sola consulta."
+
+**0:55 - 1:30 | Levanto las bases**
 > "MongoDB corre como servicio en el puerto 27017 y Oracle XE en el 1521. Verifico que los dos esten escuchando antes de conectarme, para no perder tiempo en vivo."
 
 **1:30 - 5:00 | Ejecuto el PL/SQL (aqui va la rubrica)**
@@ -204,7 +257,10 @@ Ir mostrando cada bloque de `evaluacion_medistock.sql` y su salida, en el mismo 
 6. "Sexto, el **trigger `BEFORE INSERT OR UPDATE OF STOCK`**: cualquier cliente que intente dejar el stock negativo recibe `ORA-20003`. Ojo: salta antes que el `CHECK` de la tabla, por eso el mensaje es el del trigger y no `ORA-02290`."
 7. "Septimo, el **paquete `MEDISTOCK_GESTION`** agrupa todo con una interfaz unica; no duplica logica: delega en la funcion y los procedimientos ya probados."
 
-**5:00 - 8:00 | La conexion fisica MongoDB -> Oracle**
+**5:00 - 6:30 | Muestro el CRUD de MongoDB en Compass (Johana)**
+> "Antes de conectar las dos bases, abro la base principal. Inserto un producto con todos sus campos, lo busco por su id, le cambio el precio y el stock en el mismo documento y despues lo borro. Es un documento, no una fila: los nueve campos viajan juntos y el validador del esquema rechaza el insert si falta uno. Un detalle importante: esto escribe directo en Mongo, sin pasar por el backend, asi que no genera evento de sincronizacion; Oracle recibe solo lo que escribe la API. Por eso uso un id de prueba y lo dejo borrado."
+
+**6:30 - 8:30 | La conexion fisica MongoDB -> Oracle**
 > "Ahora la parte que conecta las dos bases. El backend Node usa dos drivers: `mongodb` y `oracledb`. El script hace cuatro cosas: lee el producto desde MongoDB, abre la conexion a Oracle, invoca `MEDISTOCK_SINCRONIZACION.APLICAR_CAMBIO` pasandole la entidad, la accion y el documento serializado como JSON, y finalmente hace un `SELECT` en `MED_PRODUCTOS` para comprobar que la fila existe."
 
 Ejecutar `node demo_conexion.js` y narrar la salida:
@@ -213,7 +269,7 @@ Ejecutar `node demo_conexion.js` y narrar la salida:
 Segunda ejecucion:
 > "Lo corro otra vez: ahora el producto ya existe, se actualizo el stock en MongoDB y el `MERGE` del paquete hizo un UPDATE en Oracle. Es el mismo procedimiento cubriendo altas y modificaciones."
 
-**8:00 - 10:00 | Cierre tecnico**
+**8:30 - 10:30 | Cierre tecnico**
 > "La logica de negocio vive una sola vez, en PL/SQL, y se ejecuta sobre la replica. MongoDB manda; Oracle valida, calcula y audita. El resultado de la sincronizacion se verifica leyendo la tabla, no confiando en la respuesta de la API."
 
 ---
@@ -301,6 +357,7 @@ Frase para decirlo en una sola respiracion:
 | `ORA-00955: el nombre ya lo usa un objeto existente` | Se intento crear el tipo dos veces | Ignorar: la PARTE 0 ya lo detecta y no vuelve a crearlo |
 | El script de Node dice `Falta ORACLE_PASSWORD` | No hay `.env` ni variable de entorno | `cp .env.example .env` y completar la clave |
 | `ECONNREFUSED 127.0.0.1:27017` | MongoDB detenido | `net start "MongoDB"` |
+| Compass no abre o se cierra en plena demo | Memoria, o la ventana quedo apuntando a otra base | Hacer el mismo CRUD con `mongosh` (comandos en la seccion 3) |
 | Las tablas `MED_*` aparecen vacias de repente | El backend se reinicio y recargo la replica desde MongoDB | Volver a ejecutar `@evaluacion_medistock.sql` (es idempotente) |
 | Un bloque PL/SQL no se ejecuta completo | Se uso "Run Statement" (Ctrl+Enter) en vez de "Run Script" | Ejecutar todo el archivo con F5 (o `/` en SQL*Plus) |
 
