@@ -1,0 +1,1689 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Medistock — Arquitectura Híbrida MongoDB + Oracle PL/SQL</title>
+<style>
+/* ============================================================
+   MEDISTOCK — PRESENTACIÓN FINAL
+   HTML + CSS puro. Sin JavaScript, sin fuentes ni imágenes externas.
+   8 diapositivas, una por pantalla, navegación por scroll-snap.
+   ============================================================ */
+
+:root{
+  --ink:        #070A0F;
+  --ink-2:      #0B1017;
+  --surface:    #0E141C;
+  --line:       rgba(150,178,196,.14);
+  --line-soft:  rgba(150,178,196,.08);
+  --text:       #E9EFF3;
+  --muted:      #93A6B3;
+  --dim:        #6C7F8C;
+  --mint:       #6FE3C4;   /* MongoDB */
+  --amber:      #E8B872;   /* Oracle  */
+  --periwinkle: #9CB4FF;   /* Node.js */
+  --danger:     #F08A8A;
+
+  --serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
+  --sans:  "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --mono:  "Cascadia Mono", Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+
+  --pad-x: clamp(1.4rem, 5.2vw, 5.5rem);
+  --pad-y: clamp(3rem, 7vh, 5rem);
+}
+
+*{ box-sizing: border-box; }
+
+html{
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+  background: var(--ink);
+}
+
+body{
+  margin: 0;
+  background: var(--ink);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------- estructura de diapositiva ---------- */
+
+.deck{ counter-reset: slide; }
+
+.slide{
+  counter-increment: slide;
+  position: relative;
+  min-height: 100svh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--pad-y) var(--pad-x);
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(120% 90% at 8% -10%, rgba(111,227,196,.055), transparent 55%),
+    radial-gradient(90% 80% at 100% 108%, rgba(232,184,114,.05), transparent 58%),
+    var(--ink);
+}
+
+/* filo superior */
+.slide::before{
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(150,178,196,.22) 18%, rgba(111,227,196,.35) 50%, rgba(150,178,196,.18) 82%, transparent);
+}
+
+/* retícula tenue de fondo */
+.slide::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(to right, rgba(150,178,196,.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(150,178,196,.045) 1px, transparent 1px);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(120% 100% at 50% 40%, #000 0%, transparent 78%);
+  -webkit-mask-image: radial-gradient(120% 100% at 50% 40%, #000 0%, transparent 78%);
+  opacity: .5;
+}
+
+.frame{
+  position: relative;
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+/* numeración de diapositiva */
+.slide-num{
+  position: absolute;
+  top: clamp(1.2rem, 3.4vh, 2.4rem);
+  right: var(--pad-x);
+  font-family: var(--mono);
+  font-size: .72rem;
+  letter-spacing: .18em;
+  color: var(--dim);
+  display: flex;
+  align-items: baseline;
+  gap: .45rem;
+}
+.slide-num::before{
+  content: "0" counter(slide);
+  color: var(--mint);
+}
+.slide-num::after{
+  content: "/ 08";
+  color: rgba(108,127,140,.5);
+  letter-spacing: .1em;
+}
+.slide-num span{ display: none; }
+
+/* ---------- tipografía ---------- */
+
+.eyebrow{
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .26em;
+  text-transform: uppercase;
+  color: var(--mint);
+  margin: 0 0 clamp(.9rem, 2vh, 1.5rem);
+}
+.eyebrow::before{
+  content: "";
+  width: 2rem;
+  height: 1px;
+  background: var(--mint);
+  opacity: .7;
+}
+
+h1, h2, h3{
+  font-family: var(--serif);
+  font-weight: 400;
+  margin: 0;
+}
+
+h2{
+  font-size: clamp(1.9rem, 3.9vw, 3.15rem);
+  line-height: 1.06;
+  letter-spacing: -.022em;
+  max-width: 22ch;
+  text-wrap: balance;
+}
+
+h3{
+  font-size: 1.02rem;
+  letter-spacing: .01em;
+  color: var(--text);
+}
+
+.lead{
+  margin: clamp(.9rem, 2vh, 1.4rem) 0 0;
+  max-width: 70ch;
+  font-size: clamp(.92rem, 1.06vw, 1.03rem);
+  line-height: 1.62;
+  color: var(--muted);
+}
+.lead strong{ color: #D6E1E8; font-weight: 600; }
+
+/* párrafos explicativos con etiqueta, en dos columnas */
+.split{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(1rem, 2.4vw, 2.2rem);
+  margin-top: clamp(.9rem, 2vh, 1.4rem);
+}
+.split p{
+  margin: 0;
+  padding-top: .55rem;
+  border-top: 1px solid var(--line);
+  font-size: clamp(.8rem, .95vw, .91rem);
+  line-height: 1.56;
+  color: var(--muted);
+}
+.split .micro{
+  display: block;
+  font-family: var(--mono);
+  font-size: .57rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: .38rem;
+}
+.split strong{ color: #D6E1E8; font-weight: 600; }
+
+.accent-mongo{ color: var(--mint); }
+.accent-oracle{ color: var(--amber); }
+.accent-node{ color: var(--periwinkle); }
+.mono{ font-family: var(--mono); font-size: .88em; color: #D6E1E8; }
+
+/* ---------- utilidades de composición ---------- */
+
+.cols{
+  display: grid;
+  gap: clamp(1.2rem, 2.4vw, 2.2rem);
+  align-items: start;
+}
+.cols > *, .compare > *, .steps > *, .lessons > *, .flow > *{ min-width: 0; }
+.cols-2{ grid-template-columns: 1fr 1fr; }
+.cols-5-7{ grid-template-columns: minmax(0,1.05fr) minmax(0,1fr); }
+.cols-7-5{ grid-template-columns: minmax(0,1.25fr) minmax(0,1fr); }
+
+.card{
+  position: relative;
+  background: linear-gradient(165deg, rgba(255,255,255,.045), rgba(255,255,255,.012) 60%, rgba(255,255,255,.03));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: clamp(.9rem, 1.6vw, 1.35rem);
+}
+.card-head{
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .8rem;
+  margin-bottom: .7rem;
+}
+.tag{
+  font-family: var(--mono);
+  font-size: .62rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: .18rem .5rem;
+  white-space: nowrap;
+}
+.caption{
+  margin: .85rem 0 0;
+  font-size: .78rem;
+  line-height: 1.5;
+  color: var(--dim);
+}
+
+/* ---------- bloques de código ---------- */
+
+.code{
+  margin: 0;
+  font-family: var(--mono);
+  font-size: clamp(.66rem, .82vw, .78rem);
+  line-height: 1.72;
+  color: #C9D6DF;
+  background: #060910;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+  tab-size: 2;
+  white-space: pre;
+}
+.code .k{ color: var(--mint); }
+.code .s{ color: var(--amber); }
+.code .n{ color: var(--periwinkle); }
+.code .c{ color: #586B78; font-style: italic; }
+.code .p{ color: #7F929F; }
+.code .t{ color: #E9EFF3; }
+.code .err{ color: var(--danger); }
+
+.code-title{
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-family: var(--mono);
+  font-size: .66rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: .55rem;
+}
+.code-title::before{
+  content: "";
+  width: .4rem; height: .4rem;
+  border-radius: 50%;
+  background: var(--mint);
+  box-shadow: 0 0 0 3px rgba(111,227,196,.12);
+}
+
+/* ---------- tablas ---------- */
+
+.schema{
+  width: 100%;
+  border-collapse: collapse;
+  font-size: clamp(.7rem, .86vw, .8rem);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.schema th{
+  text-align: left;
+  font-family: var(--mono);
+  font-size: .6rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 500;
+  padding: .55rem .7rem;
+  background: rgba(150,178,196,.06);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.schema td{
+  padding: .44rem .7rem;
+  border-bottom: 1px solid var(--line-soft);
+  color: #B9C7D1;
+  vertical-align: top;
+}
+.schema tr:last-child td{ border-bottom: 0; }
+.schema .col-name{
+  font-family: var(--mono);
+  font-size: .74rem;
+  color: var(--text);
+  white-space: nowrap;
+}
+.schema .type{
+  font-family: var(--mono);
+  font-size: .68rem;
+  color: var(--amber);
+  white-space: nowrap;
+}
+.schema .key{
+  font-family: var(--mono);
+  font-size: .62rem;
+  letter-spacing: .06em;
+  color: var(--mint);
+  border: 1px solid rgba(111,227,196,.28);
+  border-radius: 4px;
+  padding: 0 .3rem;
+  white-space: nowrap;
+}
+.schema .dash{ color: #4A5A66; }
+.schema tbody tr:hover{ background: rgba(111,227,196,.035); }
+
+/* ---------- portada ---------- */
+
+.cover{ justify-content: stretch; }
+
+.cover .frame{
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100svh - (var(--pad-y) * 2));
+}
+.cover .slide-num{ display: none; }
+
+.cover-top{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--line);
+}
+.brand{
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  font-family: var(--mono);
+  font-size: .7rem;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.brand-mark{
+  width: 1.6rem; height: 1.6rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(111,227,196,.4);
+  border-radius: 6px;
+  color: var(--mint);
+  font-size: .62rem;
+  letter-spacing: .04em;
+}
+
+.cover-main{
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(1.5rem, 5vh, 3.5rem) 0;
+}
+
+.cover h1{
+  font-size: clamp(3.6rem, 13.2vw, 10.5rem);
+  line-height: .86;
+  letter-spacing: -.035em;
+  margin: 0;
+  background: linear-gradient(175deg, #FFFFFF 12%, #DCE7EC 52%, #93A6B3 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.cover .dot{
+  color: var(--mint);
+  -webkit-text-fill-color: var(--mint);
+}
+
+.cover-sub{
+  margin: clamp(1.1rem, 3vh, 2rem) 0 0;
+  font-family: var(--serif);
+  font-size: clamp(1.05rem, 1.9vw, 1.55rem);
+  letter-spacing: .01em;
+  color: #C6D3DB;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .55rem;
+}
+.cover-sub .plus{ color: var(--dim); font-family: var(--sans); font-size: .9em; }
+
+/* anillos decorativos */
+.cover-orbit{
+  position: absolute;
+  right: -6%;
+  top: 50%;
+  translate: 0 -50%;
+  width: min(46vw, 520px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid rgba(111,227,196,.14);
+  pointer-events: none;
+}
+.cover-orbit::before,
+.cover-orbit::after{
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(111,227,196,.1);
+}
+.cover-orbit::before{ inset: 11%; }
+.cover-orbit::after{ inset: 24%; border-color: rgba(232,184,114,.14); }
+.cover-orbit i{
+  position: absolute;
+  inset: 36%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(111,227,196,.16), transparent 70%);
+}
+
+.cover-foot{
+  display: grid;
+  grid-template-columns: 1.2fr 1fr .8fr;
+  gap: clamp(1rem, 2.4vw, 2.4rem);
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--line);
+}
+.meta-label{
+  display: block;
+  font-family: var(--mono);
+  font-size: .6rem;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: .4rem;
+}
+.meta-value{
+  font-size: clamp(.85rem, 1vw, .95rem);
+  color: #CBD8E0;
+  line-height: 1.45;
+}
+.meta-value small{ color: var(--dim); font-size: .78rem; }
+
+/* ---------- comparativa (slide 2) ---------- */
+
+.compare{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(1rem, 2vw, 1.6rem);
+  margin-top: clamp(1.2rem, 3vh, 2rem);
+}
+.engine{
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: clamp(.9rem, 1.5vw, 1.2rem);
+  background: linear-gradient(170deg, rgba(255,255,255,.035), rgba(255,255,255,.008));
+  overflow: hidden;
+}
+.engine::before{
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--edge, var(--mint));
+  opacity: .85;
+}
+.engine.mongo{ --edge: var(--mint); }
+.engine.oracle{ --edge: var(--amber); }
+.engine-name{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .75rem;
+}
+.engine-name h3{
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: .92rem;
+}
+.engine-name h3 em{
+  font-style: normal;
+  font-family: var(--serif);
+  font-weight: 400;
+  color: var(--dim);
+  font-size: .84rem;
+}
+.dot-mongo, .dot-oracle{
+  width: .45rem; height: .45rem;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot-mongo{ background: var(--mint); box-shadow: 0 0 0 4px rgba(111,227,196,.12); }
+.dot-oracle{ background: var(--amber); box-shadow: 0 0 0 4px rgba(232,184,114,.12); }
+
+.mini-json{
+  margin: 0;
+  font-family: var(--mono);
+  font-size: clamp(.64rem, .8vw, .74rem);
+  line-height: 1.75;
+  color: #C3D1DA;
+  background: #060910;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: .85rem .9rem;
+  white-space: pre;
+  overflow-x: auto;
+}
+.mini-json .k{ color: var(--mint); }
+.mini-json .s{ color: var(--amber); }
+.mini-json .pn{ color: #6C7F8C; }
+
+.mini-table{
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: clamp(.6rem, .74vw, .69rem);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #060910;
+}
+.mini-table th{
+  background: rgba(232,184,114,.1);
+  color: #D8C3A2;
+  font-weight: 500;
+  text-align: left;
+  padding: .38rem .5rem;
+  border-bottom: 1px solid rgba(232,184,114,.2);
+  white-space: nowrap;
+}
+.mini-table td{
+  padding: .38rem .5rem;
+  border-bottom: 1px solid rgba(150,178,196,.07);
+  color: #BAC8D2;
+  white-space: nowrap;
+}
+.mini-table tr:last-child td{ border-bottom: 0; }
+.mini-table .pk{ color: var(--amber); }
+.mini-table .bad{ color: var(--danger); }
+
+.verdict{
+  display: flex;
+  align-items: flex-start;
+  gap: .9rem;
+  margin-top: clamp(1rem, 2.4vh, 1.6rem);
+  padding: .85rem 1.1rem;
+  border: 1px solid rgba(111,227,196,.2);
+  border-left: 2px solid var(--mint);
+  border-radius: 0 10px 10px 0;
+  background: linear-gradient(90deg, rgba(111,227,196,.07), transparent 70%);
+  font-size: clamp(.84rem, .98vw, .94rem);
+  color: #CFDDE4;
+}
+.verdict b{ color: var(--mint); font-weight: 600; }
+
+/* ---------- listas de operaciones ---------- */
+
+.ops{ list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.ops li{
+  display: grid;
+  grid-template-columns: 5.2rem 1fr;
+  gap: .8rem;
+  align-items: baseline;
+  padding-bottom: .5rem;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: clamp(.8rem, .92vw, .88rem);
+  line-height: 1.45;
+  color: var(--muted);
+}
+.ops li:last-child{ border-bottom: 0; padding-bottom: 0; }
+.ops .op{
+  font-family: var(--mono);
+  font-size: .66rem;
+  letter-spacing: .1em;
+  color: var(--mint);
+}
+.ops code{
+  font-family: var(--mono);
+  font-size: .82em;
+  color: #D9E4EB;
+}
+
+.note{
+  margin: .9rem 0 0;
+  font-size: .78rem;
+  line-height: 1.55;
+  color: var(--dim);
+  padding-left: .85rem;
+  border-left: 1px solid rgba(150,178,196,.22);
+}
+.note strong{ color: #B9C7D1; font-weight: 600; }
+
+/* ---------- objetos PL/SQL ---------- */
+
+.objects{ display: grid; gap: .62rem; margin: 0; padding: 0; list-style: none; }
+.obj{
+  display: grid;
+  grid-template-columns: 1.6rem 1fr;
+  gap: .75rem;
+}
+.obj-idx{
+  font-family: var(--mono);
+  font-size: .62rem;
+  color: var(--dim);
+  padding-top: .18rem;
+}
+.obj-name{
+  font-family: var(--mono);
+  font-size: clamp(.72rem, .84vw, .79rem);
+  color: var(--text);
+  letter-spacing: .01em;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .5rem;
+}
+.obj-name .kind{
+  font-family: var(--mono);
+  font-size: .56rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--amber);
+  border: 1px solid rgba(232,184,114,.3);
+  border-radius: 3px;
+  padding: 0 .28rem;
+  translate: 0 -.05rem;
+}
+.obj-name .kind.trg{ color: var(--mint); border-color: rgba(111,227,196,.3); }
+.obj-desc{
+  margin: .1rem 0 0;
+  font-size: clamp(.74rem, .86vw, .8rem);
+  line-height: 1.45;
+  color: var(--muted);
+}
+.members{
+  margin: .35rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: .22rem;
+  font-size: clamp(.72rem, .84vw, .78rem);
+  color: var(--muted);
+}
+.members li{ display: grid; grid-template-columns: .45rem 1fr; gap: .4rem; }
+.members li::before{ content: "·"; color: var(--mint); }
+.members code{ font-family: var(--mono); font-size: .94em; color: #D6E1E8; }
+
+/* ---------- diagrama de flujo (slide 6) ---------- */
+
+.flow{
+  display: grid;
+  grid-template-columns: 1fr 2.1rem 1fr 2.1rem 1.2fr 2.1rem 1fr;
+  align-items: stretch;
+  margin: clamp(1.3rem, 3.4vh, 2.2rem) 0 clamp(1rem, 2.4vh, 1.6rem);
+}
+.node{
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: linear-gradient(170deg, rgba(255,255,255,.05), rgba(255,255,255,.012));
+  padding: .85rem .9rem;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  min-width: 0;
+}
+.node .node-kicker{
+  font-family: var(--mono);
+  font-size: .56rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.node .node-title{
+  font-family: var(--serif);
+  font-size: clamp(.9rem, 1.1vw, 1.02rem);
+  line-height: 1.2;
+  color: var(--text);
+}
+.node .node-sub{
+  font-family: var(--mono);
+  font-size: .6rem;
+  line-height: 1.5;
+  color: var(--dim);
+  word-break: break-word;
+}
+.node.mongo{ border-top: 2px solid var(--mint); }
+.node.nodejs{ border-top: 2px solid var(--periwinkle); }
+.node.plsql{ border-top: 2px solid var(--amber); background: linear-gradient(170deg, rgba(232,184,114,.09), rgba(255,255,255,.012)); }
+.node.oracle{ border-top: 2px solid var(--amber); }
+
+.link{
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.link::before{
+  content: "";
+  width: calc(100% - .55rem);
+  height: 1px;
+  background: linear-gradient(90deg, rgba(150,178,196,.2), rgba(150,178,196,.5));
+}
+.link::after{
+  content: "";
+  position: absolute;
+  right: .16rem;
+  top: 50%;
+  width: .32rem; height: .32rem;
+  border-top: 1px solid rgba(180,200,212,.75);
+  border-right: 1px solid rgba(180,200,212,.75);
+  rotate: 45deg;
+  translate: 0 -50%;
+}
+
+.steps{
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(.8rem, 1.6vw, 1.3rem);
+}
+.step{
+  padding-top: .8rem;
+  border-top: 1px solid var(--line);
+}
+.step-n{
+  font-family: var(--mono);
+  font-size: .6rem;
+  letter-spacing: .16em;
+  color: var(--mint);
+  display: block;
+  margin-bottom: .35rem;
+}
+.step h4{
+  margin: 0 0 .3rem;
+  font-family: var(--sans);
+  font-size: .86rem;
+  font-weight: 600;
+  color: #DCE6EC;
+}
+.step p{
+  margin: 0;
+  font-size: .78rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.step code{
+  font-family: var(--mono);
+  font-size: .9em;
+  color: #CBD8E0;
+}
+
+/* ---------- terminal (slide 7) ---------- */
+
+.terminal{
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #05080C;
+  box-shadow: 0 30px 60px -30px rgba(0,0,0,.9);
+}
+.term-bar{
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .5rem .75rem;
+  background: rgba(255,255,255,.035);
+  border-bottom: 1px solid var(--line-soft);
+}
+.term-bar b{
+  width: .46rem; height: .46rem;
+  border-radius: 50%;
+  background: #33424D;
+}
+.term-bar b:nth-child(1){ background: #6b4646; }
+.term-bar b:nth-child(2){ background: #6b6240; }
+.term-bar b:nth-child(3){ background: #3b6157; }
+.term-bar span{
+  margin-left: .6rem;
+  font-family: var(--mono);
+  font-size: .6rem;
+  letter-spacing: .08em;
+  color: var(--dim);
+}
+.term-body{
+  margin: 0;
+  padding: .85rem .95rem;
+  font-family: var(--mono);
+  font-size: clamp(.6rem, .76vw, .72rem);
+  line-height: 1.6;
+  color: #B7C6D0;
+  white-space: pre;
+  overflow-x: auto;
+}
+.term-body .cmd{ color: var(--text); }
+.term-body .ps1{ color: var(--mint); }
+.term-body .step{ color: var(--periwinkle); }
+.term-body .label{ color: var(--dim); }
+.term-body .val{ color: #D8E4EB; }
+.term-body .ok{ color: var(--mint); font-weight: 600; }
+.term-body .warn{ color: var(--amber); }
+.term-body .sep{ color: #3B4B56; }
+
+.verdict-card{
+  border: 1px solid rgba(111,227,196,.35);
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(111,227,196,.1), rgba(111,227,196,.02));
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+}
+.verdict-card .big{
+  font-family: var(--mono);
+  font-size: clamp(1.1rem, 1.9vw, 1.5rem);
+  color: var(--mint);
+  letter-spacing: -.01em;
+  margin: 0 0 .3rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.verdict-card .big::before{
+  content: "✔";
+  font-size: .85em;
+}
+.verdict-card p{
+  margin: 0;
+  font-size: .76rem;
+  line-height: 1.5;
+  color: #A9BBC6;
+}
+
+.cmp{
+  width: 100%;
+  border-collapse: collapse;
+  font-size: clamp(.7rem, .84vw, .78rem);
+}
+.cmp th{
+  font-family: var(--mono);
+  font-size: .58rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  text-align: right;
+  font-weight: 500;
+  padding: .4rem .5rem;
+  border-bottom: 1px solid var(--line);
+}
+.cmp th:first-child{ text-align: left; }
+.cmp td{
+  padding: .48rem .5rem;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: right;
+  font-family: var(--mono);
+  color: #D3DFE7;
+  font-size: .92em;
+}
+.cmp td:first-child{
+  text-align: left;
+  font-family: var(--sans);
+  font-size: .8rem;
+  color: var(--muted);
+}
+.cmp tr:last-child td{ border-bottom: 0; }
+.cmp .equal{ color: var(--mint); }
+.cmp .mongo-col{ color: var(--mint); }
+
+/* ---------- conclusiones (slide 8) ---------- */
+
+.lessons{
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(1rem, 2vw, 1.6rem);
+  margin-top: clamp(1.4rem, 3.4vh, 2.2rem);
+}
+.lesson{
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+.lesson .n{
+  font-family: var(--mono);
+  font-size: .6rem;
+  letter-spacing: .18em;
+  color: var(--dim);
+  display: block;
+  margin-bottom: .6rem;
+}
+.lesson h3{
+  font-family: var(--serif);
+  font-size: clamp(1.05rem, 1.4vw, 1.22rem);
+  line-height: 1.25;
+  margin-bottom: .45rem;
+}
+.lesson p{
+  margin: 0;
+  font-size: clamp(.78rem, .9vw, .85rem);
+  line-height: 1.58;
+  color: var(--muted);
+}
+.lesson p strong{ color: #D3DFE7; font-weight: 600; }
+
+.thanks{
+  margin-top: clamp(1.6rem, 4vh, 2.8rem);
+  padding-top: clamp(1rem, 2.4vh, 1.5rem);
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 2rem;
+  align-items: end;
+}
+.thanks blockquote{
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(1.05rem, 1.7vw, 1.38rem);
+  line-height: 1.45;
+  color: #DCE7ED;
+  letter-spacing: -.01em;
+  max-width: 46ch;
+}
+.thanks blockquote span{ color: var(--mint); }
+.sign{
+  text-align: right;
+  font-size: .78rem;
+  line-height: 1.6;
+  color: var(--dim);
+}
+.sign b{
+  display: block;
+  font-family: var(--serif);
+  font-size: .98rem;
+  font-weight: 400;
+  color: #D5E1E8;
+  letter-spacing: .01em;
+}
+
+/* ---------- riel de navegación ---------- */
+
+.rail{
+  position: fixed;
+  right: clamp(.7rem, 1.8vw, 1.6rem);
+  top: 50%;
+  translate: 0 -50%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: .85rem;
+  z-index: 10;
+}
+.rail a{
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: rgba(150,178,196,.28);
+  transition: width .28s ease, background .28s ease;
+}
+.rail a:hover,
+.rail a:focus-visible{
+  width: 30px;
+  background: var(--mint);
+  outline: none;
+}
+
+/* ---------- accesibilidad / responsive ---------- */
+
+@media (prefers-reduced-motion: reduce){
+  html{ scroll-behavior: auto; }
+  *{ transition: none !important; }
+}
+
+@media (max-width: 1080px){
+  .cols-2, .cols-5-7, .cols-7-5, .compare, .steps, .lessons, .thanks, .split{ grid-template-columns: 1fr; }
+  .lessons, .steps{ gap: 1rem; }
+  .rail{ display: none; }
+  .cover-foot{ grid-template-columns: 1fr 1fr; }
+  .flow{
+    grid-template-columns: 1fr;
+    gap: .45rem;
+  }
+  .link{ height: 1.5rem; }
+  .link::before{
+    width: 1px;
+    height: 100%;
+    background: linear-gradient(180deg, rgba(150,178,196,.2), rgba(150,178,196,.5));
+  }
+  .link::after{
+    right: auto;
+    top: auto;
+    bottom: .3rem;
+    left: 50%;
+    rotate: 135deg;
+    translate: -50% 0;
+  }
+  .slide{ justify-content: flex-start; padding-top: clamp(3.4rem, 8vh, 5rem); }
+  .slide-num{ top: 1rem; }
+}
+
+@media (max-width: 720px){
+  :root{ --pad-x: 1.15rem; --pad-y: 2.6rem; }
+  .cover h1{ font-size: clamp(3rem, 18vw, 5rem); }
+  .cover-orbit{ display: none; }
+  .cover-foot{ grid-template-columns: 1fr; gap: .9rem; }
+  .schema .desc{ display: none; }
+  .thanks{ grid-template-columns: 1fr; }
+  .sign{ text-align: left; }
+  .verdict{ padding: .7rem .8rem; }
+}
+
+/* pantallas bajas: comprimir para que cada slide quepa sin scroll interno */
+@media (min-height: 900px){
+  .slide{ --pad-y: 6vh; }
+}
+
+@media (max-height: 780px) and (min-width: 900px){
+  .slide{ --pad-y: 3.2vh; }
+  h2{ font-size: clamp(1.7rem, 3.1vw, 2.4rem); }
+  .lead{ font-size: .86rem; line-height: 1.5; }
+  .eyebrow{ margin-bottom: .7rem; font-size: .62rem; }
+  .schema td{ padding: .3rem .6rem; font-size: .72rem; }
+  .schema th{ padding: .42rem .6rem; }
+  .term-body{ line-height: 1.5; font-size: .58rem; }
+  .objects{ gap: .45rem; }
+  .members{ font-size: .72rem; }
+  .code{ font-size: .66rem; line-height: 1.6; }
+}
+
+/* ---------- impresión / PDF ----------
+   Este bloque va al final para que gane en la cascada.
+   Sin scroll-snap ni alturas fijas: el PDF no corta diapositivas. */
+@media print{
+  /* A4 horizontal explicito: con solo "landscape" Chrome usa Carta en este equipo
+     y el contenido se parte. A4 mide 1122 x 793 px y cada diapositiva cabe entera. */
+  @page{ size: A4 landscape; margin: 0; }
+
+  html, body{
+    height: auto !important;
+    overflow: visible !important;
+    scroll-snap-type: none !important;
+    background: #070A0F !important;
+  }
+
+  /* fuera el scroll-snap: cada diapositiva es una página */
+  .deck{ display: block !important; }
+
+  .slide{
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    justify-content: flex-start;
+    padding: 10mm 12mm;
+  }
+
+  .slide:last-of-type{ page-break-after: auto; break-after: auto; }
+
+  /* Si el papel mide menos de 1080 px de ancho, el layout movil se activaria
+     y cada diapositiva creceria al doble. En impresion se fuerzan las reticulas
+     de escritorio para que el contenido quepa en una pagina. */
+  .cols-2{ grid-template-columns: 1fr 1fr !important; }
+  .cols-5-7{ grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr) !important; }
+  .cols-7-5{ grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) !important; }
+  .compare{ grid-template-columns: 1fr 1fr !important; }
+  .steps{ grid-template-columns: repeat(3, 1fr) !important; }
+  .lessons{ grid-template-columns: repeat(3, 1fr) !important; }
+  .split{ grid-template-columns: 1fr 1fr !important; }
+  .flow{ grid-template-columns: 1fr 2.1rem 1fr 2.1rem 1.2fr 2.1rem 1fr !important; }
+  .cover-foot{ grid-template-columns: 1.2fr 1fr .8fr !important; }
+  .thanks{ grid-template-columns: 1.5fr 1fr !important; }
+  .sign{ text-align: right !important; }
+  .schema .desc{ display: table-cell !important; }
+
+  /* la portada llena la página: alto útil de A4 (297x210 mm) menos 2 x 10 mm de margen */
+  .cover .frame{ min-height: 188mm !important; }
+  /* el anillo decorativo se sale del papel: se recorta como en pantalla */
+  .cover{ overflow: hidden !important; }
+
+  .rail{ display: none !important; }
+  .slide-num{ top: 7mm; right: 12mm; }
+
+  /* conserva fondos y colores al imprimir */
+  *{
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<main class="deck">
+
+  <!-- ============================================================
+       01 — PORTADA
+       ============================================================ -->
+  <section class="slide cover" id="portada" aria-label="Portada">
+    <div class="frame">
+      <div class="cover-top">
+        <div class="brand">
+          <span class="brand-mark">MS</span>
+          Taller de Base de Datos
+        </div>
+        <div class="brand" style="letter-spacing:.16em;">Evaluación final · <span style="color:var(--amber)">2026</span></div>
+      </div>
+
+      <div class="cover-main">
+        <div class="cover-orbit" aria-hidden="true"><i></i></div>
+        <p class="eyebrow">Proyecto de arquitectura híbrida</p>
+        <h1>Medistock<span class="dot">.</span></h1>
+        <p class="cover-sub">
+          Arquitectura híbrida
+          <span class="accent-mongo">MongoDB</span>
+          <span class="plus">+</span>
+          <span class="accent-oracle">Oracle PL/SQL</span>
+        </p>
+      </div>
+
+      <div class="cover-foot">
+        <div>
+          <span class="meta-label">Integrantes</span>
+          <span class="meta-value">Yeferson Albornoz<br>Johana Manríquez</span>
+        </div>
+        <div>
+          <span class="meta-label">Stack demostrado</span>
+          <span class="meta-value">MongoDB · Node.js<br>Oracle Database 21c XE</span>
+        </div>
+        <div>
+          <span class="meta-label">Entrega</span>
+          <span class="meta-value">Noviembre 2026<br><small>8 diapositivas · demo en vivo</small></span>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num"><span>01</span></div>
+  </section>
+
+  <!-- ============================================================
+       02 — PROBLEMA Y SOLUCIÓN
+       ============================================================ -->
+  <section class="slide" id="problema" aria-label="El problema y la solución">
+    <div class="frame">
+      <p class="eyebrow">Planteamiento</p>
+      <h2>Por qué Oracle, si ya teníamos MongoDB</h2>
+
+      <div class="split">
+        <p>
+          <span class="micro">Lo que ya teníamos</span>
+          El backend original, apoyado en MongoDB, era ágil: cada producto, pedido o cuenta se resolvía con un
+          <strong>documento</strong> y el equipo avanzaba sin migraciones. Agregar un campo era editar ese
+          documento, no alterar toda la colección.
+        </p>
+        <p>
+          <span class="micro">Lo que nos faltaba</span>
+          Cuando llegaron las reglas estrictas —stock que no puede quedar negativo, precios que no admiten
+          valores inválidos, cada cambio auditado— necesitábamos <strong>la robustez de un motor relacional</strong>
+          que impusiera esas reglas por sí mismo. Eso es lo que aporta Oracle, no la buena voluntad del código.
+        </p>
+      </div>
+
+      <div class="compare">
+        <article class="engine mongo">
+          <div class="engine-name">
+            <h3><span class="dot-mongo"></span>MongoDB <em>flexibilidad</em></h3>
+            <span class="tag">products · $jsonSchema</span>
+          </div>
+<pre class="mini-json"><span class="pn">{</span>
+  <span class="k">"id"</span><span class="pn">:</span> <span class="s">"prod-guantes-01"</span><span class="pn">,</span>
+  <span class="k">"sku"</span><span class="pn">:</span> <span class="s">"GUA-001"</span><span class="pn">,</span>
+  <span class="k">"stock"</span><span class="pn">:</span> <span class="s">4</span><span class="pn">,</span>
+  <span class="k">"minStock"</span><span class="pn">:</span> <span class="s">20</span><span class="pn">,</span>
+  <span class="k">"atributos"</span><span class="pn">:</span> <span class="pn">{</span> <span class="k">"talla"</span><span class="pn">:</span> <span class="s">"M"</span><span class="pn">,</span> <span class="k">"empaque"</span><span class="pn">:</span> <span class="s">100</span> <span class="pn">}</span>
+<span class="pn">}</span></pre>
+          <p class="caption">El documento evoluciona: un campo nuevo se agrega, no se migra.</p>
+        </article>
+
+        <article class="engine oracle">
+          <div class="engine-name">
+            <h3><span class="dot-oracle"></span>Oracle <em>integridad</em></h3>
+            <span class="tag">MED_PRODUCTOS</span>
+          </div>
+          <table class="mini-table">
+            <thead>
+              <tr><th>ID_PRODUCTO</th><th>SKU</th><th>STOCK</th><th>MÍN.</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="pk">prod-guantes-01</td><td>GUA-001</td><td>4</td><td>20</td></tr>
+              <tr><td class="pk">prod-alcohol-01</td><td>ALG-001</td><td>8</td><td>10</td></tr>
+              <tr><td class="pk">prod-gasas-01</td><td>GAS-001</td><td>300</td><td>50</td></tr>
+              <tr><td class="pk">prod-gasas-01</td><td>GAS-001</td><td class="bad">-5</td><td>50</td></tr>
+            </tbody>
+          </table>
+          <p class="caption">La última fila es imposible: <span class="mono">ORA-20003</span> la rechaza antes del commit.</p>
+        </article>
+      </div>
+
+      <p class="verdict">
+        <span class="accent-mongo">→</span>
+        <span><b>La solución no fue elegir, fue separar responsabilidades.</b> MongoDB manda el documento;
+        Oracle lo replica, lo valida, lo audita y calcula sobre él. Un flujo, una sola verdad.</span>
+      </p>
+    </div>
+    <div class="slide-num"><span>02</span></div>
+  </section>
+
+  <!-- ============================================================
+       03 — MODELO NoSQL Y CRUD
+       ============================================================ -->
+  <section class="slide" id="nosql" aria-label="Modelo NoSQL y CRUD en MongoDB">
+    <div class="frame">
+      <p class="eyebrow">Base documental</p>
+      <h2>El modelo NoSQL y su CRUD</h2>
+      <p class="lead">
+        En MongoDB todo se guarda como <strong>documento JSON</strong>: un producto es un objeto con sus nueve
+        campos y un pedido lleva sus ítems dentro, así que se lee completo en una sola consulta, sin unir tablas.
+        El backend hace el CRUD con el driver oficial: crear con <span class="mono">insertOne</span>, leer con
+        <span class="mono">find</span> y <span class="mono">findOne</span>, actualizar con
+        <span class="mono">findOneAndUpdate</span> y borrar con <span class="mono">findOneAndDelete</span>.
+      </p>
+
+      <div class="cols cols-5-7" style="margin-top:1.1rem;">
+        <div>
+          <div class="code-title">colección products · un documento</div>
+<pre class="code"><span class="c">// db.products.findOne({ id: "prod-guantes-01" })</span>
+<span class="p">{</span>
+  <span class="k">"id"</span><span class="p">:</span>          <span class="s">"prod-guantes-01"</span><span class="p">,</span>
+  <span class="k">"name"</span><span class="p">:</span>        <span class="s">"Guantes de Nitrilo M (caja 100)"</span><span class="p">,</span>
+  <span class="k">"sku"</span><span class="p">:</span>         <span class="s">"GUA-001"</span><span class="p">,</span>
+  <span class="k">"description"</span><span class="p">:</span> <span class="s">"Caja de 100 unidades, sin polvo."</span><span class="p">,</span>
+  <span class="k">"price"</span><span class="p">:</span>       <span class="n">8990</span><span class="p">,</span>
+  <span class="k">"category"</span><span class="p">:</span>    <span class="s">"Insumos"</span><span class="p">,</span>
+  <span class="k">"stock"</span><span class="p">:</span>       <span class="n">4</span><span class="p">,</span>
+  <span class="k">"minStock"</span><span class="p">:</span>    <span class="n">20</span><span class="p">,</span>
+  <span class="k">"image"</span><span class="p">:</span>       <span class="s">"/img/guantes.jpg"</span>
+<span class="p">}</span></pre>
+          <p class="note">
+            <strong>Seis colecciones</strong> en la base <span class="mono">medistock</span>: products, users, orders,
+            bank_accounts, bank_transactions y stock_alerts. Cada una declara su validador
+            <span class="mono">$jsonSchema</span> y sus índices: únicos sobre <span class="mono">id</span> y
+            <span class="mono">sku</span>, y en orders por <span class="mono">customerId + createdAt</span>.
+          </p>
+        </div>
+
+        <div>
+          <h3 style="margin-bottom:.85rem;">CRUD a través del backend</h3>
+          <ul class="ops">
+            <li><span class="op">CREATE</span><span><code>insertOne()</code> con el documento ya validado por el <code>$jsonSchema</code>.</span></li>
+            <li><span class="op">READ</span><span><code>findOne()</code> por la clave <code>id</code>; <code>find()</code> con proyección que excluye <code>_id</code> y orden explícito.</span></li>
+            <li><span class="op">UPDATE</span><span><code>findOneAndUpdate()</code> con <code>$set</code>: solo los campos enviados; lo ausente no se borra.</span></li>
+            <li><span class="op">DELETE</span><span><code>findOneAndDelete()</code>, que devuelve el documento eliminado para confirmar qué salió.</span></li>
+          </ul>
+          <p class="note">
+            Rutas → servicios → repositorios → driver: <strong>las rutas nunca hablan con el driver</strong>.
+            Además, cada escritura encola un evento en <span class="mono">oracle_sync_outbox</span>, y ese evento
+            es exactamente el JSON que consume Oracle.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num"><span>03</span></div>
+  </section>
+
+  <!-- ============================================================
+       04 — MODELO RELACIONAL
+       ============================================================ -->
+  <section class="slide" id="relacional" aria-label="Modelo relacional en Oracle">
+    <div class="frame">
+      <p class="eyebrow">Réplica relacional · esquema C##MEDISTOCK</p>
+      <h2>MED_PRODUCTOS en Oracle</h2>
+      <p class="lead">
+        Oracle no inventa nada: recibe lo que MongoDB escribe y lo ordena en tablas, con <strong>clave primaria</strong>
+        en cada fila y <strong>claves foráneas</strong> donde hay relación. Esa estructura es la que permite las
+        consultas agregadas y las auditorías —el valor del inventario, el historial de cada cambio de stock— sin
+        cargar al frontend, que sigue leyendo de MongoDB.
+      </p>
+
+      <div class="cols cols-7-5" style="margin-top:1.2rem;">
+        <div>
+          <table class="schema">
+            <thead>
+              <tr>
+                <th>Columna</th>
+                <th>Tipo</th>
+                <th>Restricción</th>
+                <th class="desc">Para qué sirve</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="col-name">ID_PRODUCTO</td><td class="type">VARCHAR2</td>
+                <td><span class="key">PK</span></td><td class="desc">Clave que llega de MongoDB (<span class="mono">prod-guantes-01</span>).</td>
+              </tr>
+              <tr>
+                <td class="col-name">SKU</td><td class="type">VARCHAR2</td>
+                <td><span class="key">UK</span></td><td class="desc">Código único de inventario (<span class="mono">GUA-001</span>).</td>
+              </tr>
+              <tr>
+                <td class="col-name">NOMBRE</td><td class="type">VARCHAR2</td>
+                <td class="dash">—</td><td class="desc">Nombre comercial del producto.</td>
+              </tr>
+              <tr>
+                <td class="col-name">DESCRIPCION</td><td class="type">VARCHAR2</td>
+                <td class="dash">—</td><td class="desc">Texto libre del catálogo.</td>
+              </tr>
+              <tr>
+                <td class="col-name">PRECIO</td><td class="type">NUMBER</td>
+                <td class="dash">—</td><td class="desc">Precio unitario en CLP; el procedimiento rechaza negativos.</td>
+              </tr>
+              <tr>
+                <td class="col-name">CATEGORIA</td><td class="type">VARCHAR2</td>
+                <td class="dash">—</td><td class="desc">Agrupa el reporte de pedidos por categoría.</td>
+              </tr>
+              <tr>
+                <td class="col-name">STOCK</td><td class="type">NUMBER</td>
+                <td class="dash">—</td><td class="desc">Existencias; el trigger impide valores negativos.</td>
+              </tr>
+              <tr>
+                <td class="col-name">STOCK_MINIMO</td><td class="type">NUMBER</td>
+                <td class="dash">—</td><td class="desc">Umbral que dispara el reporte de stock bajo.</td>
+              </tr>
+              <tr>
+                <td class="col-name">IMAGEN</td><td class="type">VARCHAR2</td>
+                <td class="dash">—</td><td class="desc">Ruta de la imagen del catálogo.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <aside class="card">
+          <div class="card-head">
+            <h3>Relación con pedidos</h3>
+            <span class="tag">1 : N</span>
+          </div>
+          <p style="margin:0 0 .7rem; font-size:.79rem; line-height:1.55; color:var(--muted);">
+            <span class="mono">MED_PEDIDOS</span> <span class="accent-oracle">1 — N</span>
+            <span class="mono">MED_DETALLE_PEDIDOS</span>
+            <span class="accent-oracle">N — 1</span> <span class="mono">MED_PRODUCTOS</span>.
+            El detalle tiene clave primaria compuesta <span class="mono">(ID_PEDIDO, NUMERO_LINEA)</span>
+            y referencia el producto: así un producto aparece en muchos pedidos y cada línea guarda
+            <span class="mono">CANTIDAD</span> y <span class="mono">PRECIO_UNITARIO</span>.
+          </p>
+          <p style="margin:0 0 .7rem; font-size:.79rem; line-height:1.55; color:var(--muted);">
+            Solo <strong style="color:#D3DFE7">dos FK son constraints reales</strong>: detalle → pedidos y
+            transacciones → cuentas. Las demás son referencias lógicas que mantiene el paquete de
+            sincronización, porque las tablas se cargan con <span class="mono">MERGE</span> y el orden de
+            llegada no está garantizado.
+          </p>
+          <div style="display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.9rem;">
+            <span class="tag">8 tablas MED_*</span>
+            <span class="tag">historial de stock</span>
+            <span class="tag">alertas 1:1</span>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="slide-num"><span>04</span></div>
+  </section>
+
+  <!-- ============================================================
+       05 — LÓGICA PL/SQL
+       ============================================================ -->
+  <section class="slide" id="plsql" aria-label="La lógica PL/SQL completa">
+    <div class="frame">
+      <p class="eyebrow">El corazón del proyecto</p>
+      <h2>La lógica PL/SQL completa</h2>
+      <p class="lead">
+        Este es el núcleo del trabajo: la lógica que la base ejecuta por sí sola. El paquete
+        <strong>MEDISTOCK_GESTION</strong> reúne las funciones y procedimientos que consultan y actualizan el
+        inventario; el <strong>VARRAY</strong> permite enviar una lista de pedidos en una sola llamada, sin repetir
+        el procedimiento N veces; y los <strong>triggers</strong> vigilan cada fila para que ninguna operación rompa
+        las reglas, venga de donde venga.
+      </p>
+
+      <div class="cols cols-5-7" style="margin-top:1.2rem;">
+        <div>
+          <ul class="objects">
+            <li class="obj">
+              <span class="obj-idx">01</span>
+              <div>
+                <span class="obj-name">T_IDS_PEDIDO <span class="kind">type</span></span>
+                <p class="obj-desc"><span class="mono">VARRAY(100) OF VARCHAR2</span> a nivel de esquema: un parámetro de procedimiento no puede usar un tipo declarado dentro de un bloque.</p>
+              </div>
+            </li>
+            <li class="obj">
+              <span class="obj-idx">02</span>
+              <div>
+                <span class="obj-name">MEDISTOCK_GESTION <span class="kind">package</span></span>
+                <ul class="members">
+                  <li><span><code>VALOR_INVENTARIO()</code> — suma <code>PRECIO × STOCK</code>: <span class="accent-oracle">821.200</span></span></li>
+                  <li><span><code>PRODUCTOS_BAJO_MINIMO()</code> — cuenta los productos críticos: <span class="accent-oracle">2</span></span></li>
+                  <li><span><code>MARCAR_PEDIDOS_ENVIADOS(VARRAY)</code> — recorre el VARRAY y actualiza cada pedido</span></li>
+                  <li><span><code>REGISTRAR_PRODUCTO()</code> — excepción propia <code>ORA-20010</code> si el precio es negativo</span></li>
+                  <li><span><code>LISTAR_STOCK_BAJO()</code> — RECORD + cursor explícito</span></li>
+                  <li><span><code>MOSTRAR_PEDIDOS_POR_CATEGORIA()</code> — cursores anidados parametrizados</span></li>
+                </ul>
+              </div>
+            </li>
+            <li class="obj">
+              <span class="obj-idx">03</span>
+              <div>
+                <span class="obj-name">MED_PRODUCTOS_STOCK_VALIDA_TRG <span class="kind trg">trigger</span></span>
+                <p class="obj-desc"><span class="mono">BEFORE INSERT OR UPDATE OF STOCK</span>, por fila: rechaza stock negativo con <span class="mono">ORA-20003</span>.</p>
+              </div>
+            </li>
+            <li class="obj">
+              <span class="obj-idx">04</span>
+              <div>
+                <span class="obj-name">MED_PRODUCTOS_STOCK_AUD_TRG <span class="kind trg">trigger</span></span>
+                <p class="obj-desc"><span class="mono">AFTER INSERT OR UPDATE OF STOCK</span>: escribe en <span class="mono">MED_HISTORIAL_STOCK</span> el stock anterior y el nuevo. 17 cambios registrados en la prueba.</p>
+              </div>
+            </li>
+          </ul>
+          <p class="note">
+            El paquete <strong>delega</strong> en los objetos sueltos <span class="mono">FN_VALOR_INVENTARIO</span> y
+            <span class="mono">PR_MARCAR_PEDIDOS_ENVIADOS</span> en lugar de duplicar la lógica: una regla, una
+            implementación, dos formas de invocarla.
+          </p>
+        </div>
+
+        <div>
+          <div class="code-title">trigger de validación · código real</div>
+<pre class="code"><span class="t">CREATE OR REPLACE TRIGGER</span> MED_PRODUCTOS_STOCK_VALIDA_TRG
+<span class="t">BEFORE INSERT OR UPDATE OF</span> STOCK <span class="t">ON</span> MED_PRODUCTOS
+<span class="t">FOR EACH ROW</span>
+<span class="t">BEGIN</span>
+  <span class="t">IF</span> :NEW.STOCK &lt; <span class="n">0</span> <span class="t">THEN</span>
+    RAISE_APPLICATION_ERROR(<span class="n">-20003</span>,
+      <span class="s">'Stock invalido ('</span> || :NEW.STOCK || <span class="s">') para el producto '</span>
+      || :NEW.SKU || <span class="s">'. El stock no puede ser negativo.'</span>);
+  <span class="t">END IF</span>;
+<span class="t">END</span> MED_PRODUCTOS_STOCK_VALIDA_TRG;
+<span class="p">/</span></pre>
+
+          <div class="code-title" style="margin-top:1rem;">verificado en la ejecución</div>
+<pre class="code"><span class="c">-- UPDATE MED_PRODUCTOS SET STOCK = -5 ...</span>
+<span class="err">Bloqueado -&gt; ORA-20003: Stock invalido (-5) para el
+producto GAS-001. El stock no puede ser negativo.</span>
+<span class="t">Stock valido aceptado para prod-gasas-01.</span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num"><span>05</span></div>
+  </section>
+
+  <!-- ============================================================
+       06 — SINCRONIZACIÓN
+       ============================================================ -->
+  <section class="slide" id="sincronizacion" aria-label="Sincronización MongoDB a Oracle">
+    <div class="frame">
+      <p class="eyebrow">Integración</p>
+      <h2>De un documento JSON a una fila Oracle</h2>
+      <p class="lead">
+        El backend de Node.js serializa el documento y lo envía como JSON con tres datos: la entidad afectada, la
+        acción y el contenido. El paquete <strong>MEDISTOCK_SINCRONIZACION</strong> lo recibe y hace un
+        <strong>UPSERT</strong>: si el identificador no existe inserta la fila; si ya existe, la actualiza. Así el
+        mismo procedimiento cubre altas y modificaciones.
+      </p>
+
+      <div class="flow" role="img" aria-label="Flujo: MongoDB, Node.js, paquete MEDISTOCK_SINCRONIZACION, tabla MED_PRODUCTOS">
+        <div class="node mongo">
+          <span class="node-kicker">Origen</span>
+          <span class="node-title">MongoDB</span>
+          <span class="node-sub">documento products<br>stock: 25</span>
+        </div>
+        <div class="link" aria-hidden="true"></div>
+        <div class="node nodejs">
+          <span class="node-kicker">Backend</span>
+          <span class="node-title">Node.js</span>
+          <span class="node-sub">oracledb · 3 binds<br>JSON → CLOB</span>
+        </div>
+        <div class="link" aria-hidden="true"></div>
+        <div class="node plsql">
+          <span class="node-kicker">PL/SQL</span>
+          <span class="node-title">MEDISTOCK_SINCRONIZACION</span>
+          <span class="node-sub">APLICAR_CAMBIO(<br>&nbsp;&nbsp;entidad, accion, datos)</span>
+        </div>
+        <div class="link" aria-hidden="true"></div>
+        <div class="node oracle">
+          <span class="node-kicker">Destino</span>
+          <span class="node-title">MED_PRODUCTOS</span>
+          <span class="node-sub">MERGE · fila replicada</span>
+        </div>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <span class="step-n">PASO 01</span>
+          <h4>El backend serializa</h4>
+          <p>Node toma el documento y envía <strong>solo los campos de negocio</strong> como JSON, con <code>p_entidad</code>, <code>p_accion</code> y <code>p_datos</code>.</p>
+        </div>
+        <div class="step">
+          <span class="step-n">PASO 02</span>
+          <h4>PL/SQL extrae y compara</h4>
+          <p>El paquete lee el JSON con <code>JSON_VALUE</code> y <code>JSON_TABLE</code>, y ejecuta un <code>MERGE</code> contra la tabla destino.</p>
+        </div>
+        <div class="step">
+          <span class="step-n">PASO 03</span>
+          <h4>Un solo camino para todo</h4>
+          <p>Si el identificador existe, actualiza; si no, inserta. <strong>El mismo procedimiento sirve para alta y modificación.</strong></p>
+        </div>
+      </div>
+
+      <div class="cols cols-2" style="margin-top:1.1rem;">
+        <div class="card" style="padding:.8rem 1rem;">
+          <div class="code-title" style="margin-bottom:.4rem;">llamado desde Node</div>
+<pre class="code" style="border:0; padding:0; background:transparent; font-size:.72rem;">BEGIN MEDISTOCK_SINCRONIZACION.APLICAR_CAMBIO(
+  :p_entidad, :p_accion, :p_datos
+); END;</pre>
+        </div>
+        <div class="card" style="padding:.8rem 1rem;">
+          <div class="code-title" style="margin-bottom:.4rem;">resultado del UPSERT</div>
+<pre class="code" style="border:0; padding:0; background:transparent; font-size:.72rem;"><span class="c">-- 1ª ejecución: ID nuevo  → INSERT</span>
+<span class="c">-- 2ª ejecución: mismo ID  → UPDATE (+10 stock)</span>
+<span class="t">Tiempo PL/SQL 21 ms · Commit realizado</span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num"><span>06</span></div>
+  </section>
+
+  <!-- ============================================================
+       07 — DEMOSTRACIÓN EN VIVO
+       ============================================================ -->
+  <section class="slide" id="demo" aria-label="Demostración en vivo">
+    <div class="frame">
+      <p class="eyebrow">La prueba reina</p>
+      <h2>node demo_conexion.js</h2>
+      <p class="lead">
+        Esta es la prueba de concepto real: el script se ejecuta delante del profesor y compara los dos motores al
+        final. No se confía en la respuesta de la API; se lee la tabla en Oracle y se verifica que el stock
+        <strong>coincide exactamente</strong> con el de MongoDB después de la sincronización.
+      </p>
+
+      <div class="cols cols-7-5" style="margin-top:1.1rem; align-items:stretch;">
+        <div class="terminal">
+          <div class="term-bar"><b></b><b></b><b></b><span>demo_conexion.js — Node.js</span></div>
+<pre class="term-body"><span class="ps1">$</span> <span class="cmd">node demo_conexion.js</span>
+<span class="sep">─────────────────────────────────────────────────────────</span>
+DEMOSTRACION DE SINCRONIZACION MONGODB -&gt; ORACLE
+  <span class="label">MongoDB                   </span><span class="val">mongodb://localhost:27017</span>
+  <span class="label">Oracle                    </span><span class="val">localhost:1521/XE (C##MEDISTOCK)</span>
+
+<span class="step">PASO 1: Conectar a MongoDB y leer la coleccion products</span>
+  <span class="label">Base de datos             </span><span class="val">medistock</span>
+  <span class="label">Documentos en products    </span><span class="val">1</span>
+
+<span class="step">PASO 2: Buscar el producto de demostracion</span>
+  <span class="label">Resultado                 </span><span class="warn">producto no existia: insertado en MongoDB</span>
+  <span class="label">id / sku                  </span><span class="val">demo-sync-01 / SYNC-DEMO-01</span>
+  <span class="label">price / stock / minStock  </span><span class="val">19990 / 25 / 5</span>
+<span class="label">  ···            (paso 3: conexión a Oracle verificada)</span>
+
+<span class="step">PASO 4: Invocar MEDISTOCK_SINCRONIZACION.APLICAR_CAMBIO</span>
+  <span class="label">Llamada                   </span><span class="val">APLICAR_CAMBIO(products, UPSERT, json)</span>
+  <span class="label">Tiempo PL/SQL             </span><span class="val">21 ms</span>
+  <span class="label">Commit                    </span><span class="val">realizado</span>
+
+<span class="step">PASO 6: MongoDB y Oracle tienen el mismo stock</span>
+  <span class="label">stock en MongoDB          </span><span class="val">25</span>
+  <span class="label">stock en Oracle           </span><span class="val">25</span>
+
+  <span class="ok">RESULTADO: OK - la sincronizacion MongoDB -&gt; Oracle
+  quedo demostrada.</span></pre>
+        </div>
+
+        <div>
+          <div class="verdict-card">
+            <p class="big">RESULTADO: OK</p>
+            <p>La fila existe en <span class="mono">MED_PRODUCTOS</span> con el mismo stock que el documento de origen: 25 en MongoDB, 25 en Oracle.</p>
+          </div>
+
+          <h3 style="margin:0 0 .5rem; font-size:.82rem; color:var(--dim); font-family:var(--mono); letter-spacing:.14em; text-transform:uppercase; font-weight:500;">Comparativa</h3>
+          <table class="cmp">
+            <thead>
+              <tr><th>Dato</th><th>MongoDB</th><th>Oracle</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Stock</td><td class="mongo-col">25</td><td class="equal">25</td></tr>
+              <tr><td>Precio (CLP)</td><td class="mongo-col">19.990</td><td class="equal">19.990</td></tr>
+              <tr><td>SKU</td><td class="mongo-col">SYNC-DEMO-01</td><td class="equal">SYNC-DEMO-01</td></tr>
+              <tr><td>Diferencia</td><td colspan="2" class="equal" style="text-align:right;">0</td></tr>
+            </tbody>
+          </table>
+
+          <p class="note" style="margin-top:.9rem;">
+            Ejecutado dos veces seguidas: la primera <strong>inserta</strong> (stock 25), la segunda
+            <strong>actualiza</strong> (+10). Los dos caminos del <span class="mono">MERGE</span>, sin cambiar una línea.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num"><span>07</span></div>
+  </section>
+
+  <!-- ============================================================
+       08 — CONCLUSIONES
+       ============================================================ -->
+  <section class="slide" id="conclusiones" aria-label="Conclusiones y aprendizajes">
+    <div class="frame">
+      <p class="eyebrow">Cierre</p>
+      <h2>Lo que aprendimos</h2>
+
+      <div class="lessons">
+        <article class="lesson">
+          <span class="n">01 — INTEGRIDAD</span>
+          <h3>Una regla que la base impone</h3>
+          <p>El trigger convierte una validación en algo que <strong>no depende de que el código se acuerde</strong>. Un stock de -5 no entra, venga de donde venga: lo comprobamos con <span class="mono">ORA-20003</span> y con la fila que nunca se creó.</p>
+        </article>
+        <article class="lesson">
+          <span class="n">02 — AUTOMATIZACIÓN</span>
+          <h3>La lógica vive en la base</h3>
+          <p>Una función y un paquete evitan que cada cliente reimplemente el cálculo. <strong>El mismo <span class="mono">VALOR_INVENTARIO</span></strong> responde a SQL, a Node o a un reporte: 821.200 CLP calculados en un solo lugar.</p>
+        </article>
+        <article class="lesson">
+          <span class="n">03 — ARQUITECTURA HÍBRIDA</span>
+          <h3>Cada motor en lo suyo</h3>
+          <p>MongoDB aporta el documento que cambia; Oracle, la fila que se audita. La sincronización en <strong>un solo sentido</strong> mantiene una verdad única y verificable, sin dos fuentes peleando por el mismo dato.</p>
+        </article>
+      </div>
+
+      <div class="thanks">
+        <blockquote>
+          «Un proyecto híbrido no se demuestra con un diagrama, sino con una prueba que se pueda ejecutar
+          delante de usted. <span>Gracias, profesor, por exigirla.</span>»
+        </blockquote>
+        <div class="sign">
+          <b>Yeferson Albornoz · Johana Manríquez</b>
+          Taller de Base de Datos · Medistock 2026
+        </div>
+      </div>
+    </div>
+    <div class="slide-num"><span>08</span></div>
+  </section>
+
+</main>
+
+<nav class="rail" aria-label="Navegación entre diapositivas">
+  <a href="#portada" title="1 · Portada" aria-label="Ir a la portada"></a>
+  <a href="#problema" title="2 · Problema y solución" aria-label="Ir al problema y la solución"></a>
+  <a href="#nosql" title="3 · Modelo NoSQL y CRUD" aria-label="Ir al modelo NoSQL y CRUD"></a>
+  <a href="#relacional" title="4 · Modelo relacional" aria-label="Ir al modelo relacional"></a>
+  <a href="#plsql" title="5 · Lógica PL/SQL" aria-label="Ir a la lógica PL/SQL"></a>
+  <a href="#sincronizacion" title="6 · Sincronización" aria-label="Ir a la sincronización"></a>
+  <a href="#demo" title="7 · Demostración" aria-label="Ir a la demostración"></a>
+  <a href="#conclusiones" title="8 · Conclusiones" aria-label="Ir a las conclusiones"></a>
+</nav>
+
+</body>
+</html>
